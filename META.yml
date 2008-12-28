@@ -1,0 +1,24 @@
+--- #YAML:1.0
+name:                AnyEvent-XMPP
+version:             0.2
+abstract:            An implementation of the XMPP Protocol
+license:             perl
+author:              
+    - Robin Redeker <elmex@ta-sa.org>
+generated_by:        ExtUtils::MakeMaker version 6.42
+distribution_type:   module
+requires:     
+    AnyEvent:                      0
+    AnyEvent::Handle:              0
+    AnyEvent::Socket:              0
+    Authen::SASL:                  0
+    Digest::SHA1:                  0
+    MIME::Base64:                  0
+    Net::LibIDN:                   0
+    Object::Event:                 0
+    Scalar::Util:                  0
+    XML::Parser::Expat:            0
+    XML::Writer:                   0
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3
