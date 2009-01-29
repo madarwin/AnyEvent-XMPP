@@ -4,8 +4,6 @@ no warnings;
 
 use AnyEvent;
 use IO::Handle;
-use IO::Socket;
-use IO::Socket::INET;
 use Encode;
 use AnyEvent::Socket;
 use AnyEvent::Handle;
@@ -51,12 +49,12 @@ sub connect {
       my ($fh, $peerhost, $peerport) = @_;
 
       unless ($fh) {
-         $self->disconnect ("Couldn't create socket to $self->{host}:$self->{port}: $!");
+         $self->disconnect ("Couldn't create socket to $host:$service: $!");
          return;
       }
 
-      $self->{host} = $peerhost;
-      $self->{port} = $peerport;
+      $self->{peer_host} = $peerhost;
+      $self->{peer_port} = $peerport;
 
       binmode $fh, ":raw";
 
@@ -64,17 +62,17 @@ sub connect {
          AnyEvent::Handle->new (
             fh => $fh,
             on_eof => sub {
-               $self->disconnect ("EOF on connection to $self->{host}:$self->{port}: $!");
+               $self->disconnect ("EOF on connection to $self->{peer_host}:$self->{peer_port}: $!");
             },
             autocork => 1,
             on_error => sub {
-               $self->disconnect ("Error on connection to $self->{host}:$self->{port}: $!");
+               $self->disconnect ("Error on connection to $self->{peer_host}:$self->{peer_port}: $!");
             },
             on_read => sub {
                my ($hdl) = @_;
-               my $data = $hdl->rbuf;
+               my $data   = $hdl->rbuf;
                $hdl->rbuf = '';
-               $data = decode_utf8 $data;
+               $data      = decode_utf8 $data;
                $self->handle_data (\$data);
             },
          );
@@ -129,7 +127,7 @@ sub enable_ssl {
 sub disconnect {
    my ($self, $msg) = @_;
    $self->end_sockets;
-   $self->{disconnect_cb}->($self->{host}, $self->{port}, $msg);
+   $self->{disconnect_cb}->($self->{peer_host}, $self->{peer_port}, $msg);
 }
 
 1;

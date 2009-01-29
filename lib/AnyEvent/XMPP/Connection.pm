@@ -1,7 +1,6 @@
 package AnyEvent::XMPP::Connection;
 use strict;
 use AnyEvent;
-use IO::Socket::INET;
 use AnyEvent::XMPP::Parser;
 use AnyEvent::XMPP::Writer;
 use AnyEvent::XMPP::Util qw/split_jid join_jid simxml/;
@@ -64,6 +63,25 @@ Please look in RFC 3066 how C<$tag> should look like.
 This can be used to set the settings C<username>, C<domain>
 (and optionally C<resource>) from a C<$jid>.
 
+=item username => $username
+
+This is your C<$username> (the userpart in the JID);
+
+Note: You have to take care that the stringprep profile for
+nodes can be applied at: C<$username>. Otherwise the server
+might signal an error. See L<AnyEvent::XMPP::Util> for utility functions
+to check this.
+
+B<NOTE:> This field has no effect if C<jid> is given!
+
+=item domain => $domain
+
+If you didn't provide a C<jid> (see above) you have to set the
+C<username> which you want to connect as (see above) and the
+C<$domain> to connect to.
+
+B<NOTE:> This field has no effect if C<jid> is given!
+
 =item resource => $resource
 
 If this argument is given C<$resource> will be passed as desired
@@ -74,31 +92,26 @@ resources can be applied at: C<$resource>. Otherwise the server
 might signal an error. See L<AnyEvent::XMPP::Util> for utility functions
 to check this.
 
-=item domain => $domain
+=item host => $host
 
-This is the destination host we are going to connect to.
-As the connection won't be automatically connected use C<connect>
-to initiate the connect.
+This parameter specifies the hostname where we are going
+to connect to. The default for this is the C<domain> of the C<jid>.
+
+B<NOTE:> To disable DNS SRV lookup you need to specify the port B<number>
+yourself. See C<port> below.
 
 =item port => $port
 
-This is optional, the default port is 'xmpp', which will used as C<$service>
-argument to C<tcp_connect> of L<AnyEvent::Socket>.
+This is optional, the default value for C<$port> is 'xmpp-client=5222', which
+will used as C<$service> argument to C<tcp_connect> of L<AnyEvent::Socket>.
+B<NOTE:> If you specify the port number here (instead of 'xmpp-client=5222'),
+B<no> DNS SRV lookup will be done when connecting.
 
 =item connect_timeout => $timeout
 
 This sets the connection timeout. If the socket connect takes too long
 a C<disconnect> event will be generated with an appropriate error message.
 If this argument is not given no timeout is installed for the connects.
-
-=item username => $username
-
-This is your C<$username> (the userpart in the JID);
-
-Note: You have to take care that the stringprep profile for
-nodes can be applied at: C<$username>. Otherwise the server
-might signal an error. See L<AnyEvent::XMPP::Util> for utility functions
-to check this.
 
 =item password => $password
 
@@ -232,6 +245,9 @@ sub new {
       $self->{resource} = $res if defined $res;
    }
 
+   $self->{host} = $self->{domain}    unless defined $self->{host};
+   $self->{port} = 'xmpp-client=5222' unless defined $self->{port};
+
    my $proxy_cb = sub {
       my ($self, $er) = @_;
       $self->event (error => $er);
@@ -303,15 +319,13 @@ was successfully connected.
 
 sub connect {
    my ($self) = @_;
-
-   my ($host, $port) = ($self->{domain}, defined $self->{port} ? $self->{port} : 5222);
-   $self->SUPER::connect ($host, $port, $self->{connect_timeout});
+   $self->SUPER::connect ($self->{host}, $self->{port}, $self->{connect_timeout});
 }
 
 sub connected {
    my ($self) = @_;
    $self->init;
-   $self->event (connect => $self->{host}, $self->{port});
+   $self->event (connect => $self->{peer_host}, $self->{peer_port});
 }
 
 sub send_buffer_empty {
@@ -598,8 +612,7 @@ sub send_sasl_auth {
    }
 
    $self->{writer}->send_sasl_auth (
-      (join ' ', map { $_->text } @mechs),
-      $self->{username}, $self->{domain}, $self->{password}
+      [map { $_->text } @mechs], $self->{username}, $self->{host}, $self->{password}
    );
 }
 

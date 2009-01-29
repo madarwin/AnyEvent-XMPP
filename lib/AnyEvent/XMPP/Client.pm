@@ -103,10 +103,11 @@ sub add_extension {
 This method adds a jabber account for connection with the JID C<$jid>
 and the password C<$password>.
 
-C<$host> and C<$port> are optional and can be undef. C<$host> overrides the
-host in the C<$jid>.
+C<$host> and C<$port> can be undef and their default will be the domain of the
+C<$jid> and the default for the C<port> parameter to the constructor of
+L<AnyEvent::XMPP::Connection> (look there for details about DNS-SRV lookups).
 
-C<$connection_args> must either be undef or a hashreference to
+C<$connection_args> must either be undef or a hash reference to
 additional arguments for the constructor of the L<AnyEvent::XMPP::IM::Connection>
 that will be used to connect the account.
 
@@ -228,19 +229,17 @@ sub disconnect {
    }
 }
 
-=head2 remove_accounts ($msg)
+=head2 remove_accounts ($reason)
 
-Removes all accounts and disconnects.
+Removes all accounts and disconnects. C<$reason> should be some descriptive
+reason why this account was removed (just for logging purposes).
 
 =cut
 
 sub remove_accounts {
-   my ($self, $msg) = @_;
+   my ($self, $reason) = @_;
    for my $acc (keys %{$self->{accounts}}) {
-      my $acca = $self->{accounts}->{$acc};
-      $self->event (removed_account => $acca);
-      if ($acca->is_connected) { $acca->connection ()->disconnect ($msg) }
-      delete $self->{accounts}->{$acc};
+      $self->remove_account ($acc, $reason);
    }
 }
 
@@ -253,10 +252,9 @@ The reason for the removal can be given via C<$reason>.
 
 sub remove_account {
    my ($self, $acc, $reason) = @_;
-   $self->event (removed_account => $acc);
-   if ($acc->is_connected) {
-      $acc->connection ()->disconnect ($reason);
-   }
+   my $acca = $self->{accounts}->{$acc};
+   $self->event (removed_account => $acca);
+   if ($acca->is_connected) { $acca->connection ()->disconnect ($reason) }
    delete $self->{accounts}->{$acc};
 }
 
@@ -264,7 +262,7 @@ sub remove_account {
 
 Sets the set of (to be connected) accounts. C<$accounts> must be a hash
 reference which contains the JIDs of the accounts as keys and the values for
-C<$password>, C<$host>, C<$port> and C<$connection_args> as described in
+C<$password>, C<$domain>, C<$port> and C<$connection_args> as described in
 C<add_account> above.
 
 If the account is not yet connected it will be connected on the next call to

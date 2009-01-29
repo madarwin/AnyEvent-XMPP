@@ -219,34 +219,51 @@ sub send_end_of_stream {
    $self->flush;
 }
 
-=item B<send_sasl_auth ($mechanisms)>
+=item B<send_sasl_auth ($mechanisms, $user, $hostname, $pass)>
 
 This methods sends the start of a SASL authentication. C<$mechanisms> is
-a string with space seperated mechanisms that are supported by the other
-end.
+an array reference, containing the mechanism names that are to be tryed.
 
 =cut
 
 sub send_sasl_auth {
-   my ($self, $mechanisms, $user, $domain, $pass) = @_;
+   my ($self, $mechs, $user, $hostname, $pass) = @_;
 
-   my $sasl = Authen::SASL->new (
-      mechanism => $mechanisms,
-      callback => {
- # XXX: removed authname, because it ensures maximum connectivitiy
- #      along multiple server implementations - XMPP is such a crap
- #        authname => $user . '@' . $domain,
-         user => $user,
-         pass => $pass,
+   my $data;
+    
+   my $found_mech = 0;
+   while (!$found_mech) {
+      my $sasl = Authen::SASL->new (
+         mechanism => join (' ', @$mechs),
+         callback => {
+            # XXX: removed authname, because it ensures maximum connectivitiy
+            #      along multiple server implementations - XMPP is such a crap
+            #        authname => $user . '@' . $domain,
+            user => $user,
+            pass => $pass,
+         }
+      );
+
+      my $mech = $sasl->client_new ('xmpp', $hostname);
+      $data = $mech->client_start;
+
+      if (my $e = $mech->error) {
+         @$mechs = grep { $_ ne $mech->mechanism } @$mechs;
+         die "No usable SASL mechanism found (tried: "
+             . join (', ', @$mechs)
+             . ")!\n"
+            unless @$mechs;
+         next;
       }
-   );
 
-   $self->{sasl} = $sasl->client_new ('xmpp', $domain);
+      $found_mech = 1;
+      $self->{sasl} = $mech;
+   }
 
    my $w = $self->{writer};
    $w->addPrefix (xmpp_ns ('sasl'),   '');
    $w->startTag ([xmpp_ns ('sasl'), 'auth'], mechanism => $self->{sasl}->mechanism);
-   $w->characters (MIME::Base64::encode_base64 ($self->{sasl}->client_start, ''));
+   $w->characters (MIME::Base64::encode_base64 ($data, ''));
    $w->endTag;
    $self->flush;
 }
@@ -264,8 +281,9 @@ sub send_sasl_response {
    my $ret = '';
    unless ($challenge =~ /rspauth=/) { # rspauth basically means: we are done
       $ret = $self->{sasl}->client_step ($challenge);
-      unless ($ret) {
-         die "Error in SASL authentication in client step with challenge: '$challenge'\n";
+      if (my $e = $self->{sasl}->error) {
+         #die "Error in SASL authentication in client step with challenge: '$challenge'\n";
+         die "Error in SASL authentication in client step with challenge: '" . $e . "'\n";
       }
    }
    my $w = $self->{writer};
@@ -379,8 +397,10 @@ Or something completly different if you don't like the RFC 3921 :-)
 C<%attrs> contains further attributes for the presence tag or may contain one of the
 following exceptional keys:
 
-If C<%attrs> contains a 'show' key: a child xml tag with that name will be geenerated
+If C<%attrs> contains a 'show' key: a child xml tag with that name will be generated
 with the value as the content, which should be one of 'away', 'chat', 'dnd' and 'xa'.
+If it contains an undefined value no such tag will be generated, which usually means
+that the 'available' presence is meant.
 
 If C<%attrs> contains a 'status' key: a child xml tag with that name will be generated
 with the value as content. If the value of the 'status' key is an hash reference
