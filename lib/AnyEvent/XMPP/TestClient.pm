@@ -123,77 +123,79 @@ sub init {
    my $cl = $self->{client} = AnyEvent::XMPP::Client->new (debug => $self->{debug} || 0);
    my ($jid, $password) = split /:/, $ENV{NET_XMPP2_TEST}, 2;
 
-   $self->{jid} = $jid;
+   $self->{jid}      = $jid;
+   $self->{jid2}     = "2nd_" . $jid;
    $self->{password} = $password;
    $cl->add_account ($jid, $password, undef, undef, $self->{connection_args});
 
    if ($self->{two_accounts}) {
-      $self->{connected_accounts} = {};
-
+      my $cnt = 0;
       $cl->reg_cb (session_ready => sub {
          my ($cl, $acc) = @_;
-         $self->{connected_accounts}->{$acc->bare_jid} = $acc->jid;
-         my (@jids) = values %{$self->{connected_accounts}};
-         my $cnt = scalar @jids;
-         if ($cnt > 1) {
-            $cl->event (two_accounts_ready => $acc, @jids);
+
+         if (++$cnt > 1) {
+            $self->{acc}  = $cl->get_account ($self->{jid});
+            $self->{acc2} = $cl->get_account ($self->{jid2});
+            $cl->event ('two_accounts_ready', $acc);
+            $self->state_done ('two_accounts_ready');
          }
       });
 
       $cl->add_account ("2nd_".$jid, $password, undef, undef, $self->{connection_args});
-   }
 
+   } else {
+      $cl->reg_cb (before_session_ready => sub {
+         my ($cl, $acc) = @_;
+         $self->{acc} = $acc;
+         $self->state_done ('one_account_ready');
+      });
+   }
 
    if ($self->{muc_test} && $ENV{NET_XMPP2_TEST_MUC}) {
       $self->{muc_room} = "test_nxmpp2@" . $ENV{NET_XMPP2_TEST_MUC};
 
-      my $disco = $self->instance_ext ('AnyEvent::XMPP::Ext::Disco');
-      $self->{disco} = $disco;
+      my $disco = $self->{disco} = $self->instance_ext ('AnyEvent::XMPP::Ext::Disco');
+      my $muc   = $self->{muc}   = $self->instance_ext ('AnyEvent::XMPP::Ext::MUC', disco => $disco);
 
       $cl->reg_cb (
-         before_session_ready => sub {
-            my ($cl, $acc) = @_;
-            my $con = $acc->connection;
-            $con->add_extension (
-               $self->{mucs}->{$acc->bare_jid}
-                  = AnyEvent::XMPP::Ext::MUC->new (disco => $disco, connection => $con)
-            );
-         },
          two_accounts_ready => sub {
-            my ($cl, $acc, $jid1, $jid2) = @_;
+            my ($cl, $acc) = @_;
             my $cnt = 0;
             my ($room1, $room2);
-            my $muc = $self->{muc1} = $self->{mucs}->{prep_bare_jid $jid1};
 
-            $muc->join_room ($self->{muc_room}, "test1", sub {
-               my ($room, $user, $error) = @_;
-               $room1 = $room;
-               if ($error) {
-                  $self->{error} .= "Error: Couldn't join $self->{muc_room} as 'test1': ".$error->string."\n";
+            $muc->join_room ($self->{acc}->connection, $self->{muc_room}, "test1");
+            my $rid;
+            $rid = $muc->reg_cb (
+               join_error => sub {
+                  my ($muc, $room, $error) = @_;
+                  $self->{error} .= "Error: Couldn't join $self->{muc_room}: ".$error->string."\n";
                   $self->{condvar}->broadcast;
-               } else {
-                  my $muc = $self->{muc2} = $self->{mucs}->{prep_bare_jid $jid2};
-                  $muc->join_room ($self->{muc_room}, "test2", sub {
-                     my ($room, $user, $error) = @_;
-                     my $room2 = $room;
-                     if ($error) {
-                        $self->{error} .= "Error: Couldn't join $self->{muc_room} as 'test2'".$error->string."\n";
-                        $self->{condvar}->broadcast;
-                     } else {
-                        $cl->event (two_rooms_joined => $acc, $jid1, $jid2, $room1, $room2)
-                     }
-                  });
+               },
+               enter => sub {
+                  my ($muc, $room, $user) = @_;
+
+                  if ($room->get_me->nick eq 'test1') {
+                     $self->{user} = $user;
+                     $self->{room} = $room;
+
+                     $muc->join_room ($self->{acc2}->connection, $self->{muc_room}, "test2");
+                  } else {
+                     $self->{user2} = $user;
+                     $self->{room2} = $room;
+
+                     $muc->unreg_cb ($rid);
+                     $cl->event ('two_rooms_joined', $acc);
+                     $self->state_done ('two_rooms_joined');
+                  }
                }
-            });
-
-
+            );
          }
       );
    }
 
-
    $cl->reg_cb (error => sub {
       my ($cl, $acc, $error) = @_;
+
       $self->{error} .= "Error: " . $error->string . "\n";
       $self->finish unless $self->{continue_on_error};
    });
@@ -210,6 +212,7 @@ sub reached_checkpoint {
    my ($self, $name) = @_;
    my $chp = $self->{checkpoints}->{$name}
       or die "no such checkpoint defined: $name";
+
    $chp->[0]--;
    if ($chp->[0] <= 0) {
       $chp->[1]->();
@@ -225,6 +228,7 @@ sub tests { $_[0]->{tests} }
 
 sub instance_ext {
    my ($self, $ext, @args) = @_;
+
    eval "require $ext; 1";
    if ($@) { die "Couldn't load '$ext': $@" }
    my $eo = $ext->new (@args);
@@ -234,6 +238,7 @@ sub instance_ext {
 
 sub finish {
    my ($self) = @_;
+
    $self->{_cur_finish_cnt}++;
    if ($self->{finish_count} <= $self->{_cur_finish_cnt}) {
       $self->{condvar}->broadcast;
@@ -253,6 +258,68 @@ sub wait {
 }
 
 sub error { $_[0]->{error} }
+
+my %STATE;
+
+sub state {
+   my $self = shift;
+   my $prec = [];
+   if (ref $_[0] eq 'ARRAY') {
+      $prec = shift;
+   }
+   my ($state, $args, $cond, $cb) = @_;
+   $STATE{$state} = { name => $state, args => $args, cond => $cond, cb => $cb, done => 0, prec => $prec };
+
+   $self->state_check ();
+}
+
+sub state_done {
+   my ($self, $state) = @_;
+   $STATE{$state} ||= {
+      name => $state, args => undef, cond => undef, cb => undef, done => 0
+   };
+   $STATE{$state}->{done} = 1;
+   if ($ENV{ANYEVENT_XMPP_MAINTAINER_TEST_DEBUG}) {
+      warn "STATE '$state' DONE\n";
+   }
+
+   $self->state_check ();
+}
+
+sub state_check {
+   my ($self, $state, $cb) = @_;
+   if (defined $state && $STATE{$state} && !$STATE{$state}->{done}) {
+      $cb->($STATE{$state}->{args});
+   }
+
+   RESTART: {
+      for my $s (grep { !$_->{done} } values %STATE) {
+         if (@{$s->{prec} || []}
+             && grep { !$STATE{$_} || !$STATE{$_}->{done} } @{$s->{prec} || []}) {
+            next;
+         }
+
+         if (!defined ($s->{cond}) || $s->{cond}->($s->{args})) {
+            if ($ENV{ANYEVENT_XMPP_MAINTAINER_TEST_DEBUG}) {
+               print "STATE '$s->{name}' OK (".join (',', @{$s->{prec} || []}).")\n";
+            }
+            $s->{cb}->($s->{args}) if defined $s->{cb};
+            $s->{done} = 1;
+            goto RESTART;
+         }
+      }
+   }
+
+   if ($ENV{ANYEVENT_XMPP_MAINTAINER_TEST_DEBUG}) {
+      warn "STATE STATUS:\n";
+      for my $s (keys %STATE) {
+         warn "\t$s => $STATE{$s}->{done}\t"
+            . join (',', map {
+                  "$_:$STATE{$s}->{args}->{$_}" } keys %{$STATE{$s}->{args}}
+            )."\n";
+      }
+   }
+}
 
 =head1 AUTHOR
 

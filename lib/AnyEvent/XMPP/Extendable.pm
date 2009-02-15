@@ -21,12 +21,16 @@ Please see L<AnyEvent::XMPP::Ext> for more information about this mechanism.
 This method extends the current object with a L<AnyEvent::XMPP::Ext> object.
 C<$ext> must be an instance of L<AnyEvent::XMPP::Ext>.
 
+Basically C<add_extension> makes the extension an event receiver
+for all events that the extended object receives.
+
 =cut
 
 sub add_extension {
    my ($self, $ext) = @_;
    $self->add_forward ($ext, sub {
       my ($self, $ext, $ev, @args) = @_;
+      return if $ext->{inhibit_forward}->{$ev};
       $ext->_event ($ev, $self, @args);
    });
 }
@@ -42,14 +46,6 @@ sub remove_extension {
    $self->remove_forward ($ext);
 }
 
-=item B<disco_feature>
-
-This method can be overwritten by the extension and should return
-a list of namespace URIs of the features that the extension enables.
-
-=cut
-
-sub disco_feature { }
 
 =back
 

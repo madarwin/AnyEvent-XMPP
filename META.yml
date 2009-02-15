@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               AnyEvent-XMPP
-version:            0.3
+version:            0.4
 abstract:           An implementation of the XMPP Protocol
 author:
     - Robin Redeker <elmex@ta-sa.org>

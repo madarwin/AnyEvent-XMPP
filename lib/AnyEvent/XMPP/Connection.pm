@@ -100,6 +100,15 @@ to connect to. The default for this is the C<domain> of the C<jid>.
 B<NOTE:> To disable DNS SRV lookup you need to specify the port B<number>
 yourself. See C<port> below.
 
+=item use_host_as_sasl_hostname => $bool
+
+This is a special parameter for people who might want to use GSSAPI SASL
+mechanism. It will cause the value of the C<host> parameter (see above) to be
+passed to the SASL mechanisms, instead of the C<domain> of the JID.
+
+This flag is provided until support for XEP 0233 is deployed, which
+will fix the hostname issue w.r.t. GSSAPI SASL.
+
 =item port => $port
 
 This is optional, the default value for C<$port> is 'xmpp-client=5222', which
@@ -120,6 +129,16 @@ This is the password for the C<username> above.
 =item disable_ssl => $bool
 
 If C<$bool> is true no SSL will be used.
+
+=item old_style_ssl => $bool
+
+If C<$bool> is true the TLS handshake will be initiated when the TCP
+connection was established. This is useful if you have to connect to
+an old Jabber server, with old-style SSL connections on port 5223.
+
+But that practice has been discouraged in XMPP, and a TLS handshake is done
+after the XML stream has been established. Only use this option if you know
+what you are doing.
 
 =item disable_sasl => $bool
 
@@ -156,6 +175,14 @@ the server.
 
 Please note that the old authentication method will fail if C<disable_iq_auth>
 is true.
+
+=item stream_version_override => $version
+
+B<NOTE:> Only use if you B<really> know what you are doing!
+
+This will override the stream version which is sent in the XMPP stream
+initiation element. This is currently only used by the tests which
+set C<$version> to '0.9' for testing IQ authentication with ejabberd.
 
 =item whitespace_ping_interval => $interval
 
@@ -273,6 +300,7 @@ sub new {
             AnyEvent::XMPP::Error->new (text => 'tls_error: tls negotiation failed')
          );
       },
+      iq_xml => sub { shift @_; $self->handle_iq (@_) }
    );
 
    if ($self->{whitespace_ping_interval} > 0) {
@@ -312,8 +340,12 @@ when the connection was successfully established.
 If the connection try was not successful a C<disconnect> event
 will be generated with an error message.
 
+NOTE: Please note that you can't reconnect a L<AnyEvent::XMPP::Connection>
+object. You need to recreate it if you want to reconnect.
+
 NOTE: The "XML" stream initiation is sent when the connection
 was successfully connected.
+
 
 =cut
 
@@ -324,6 +356,11 @@ sub connect {
 
 sub connected {
    my ($self) = @_;
+
+   if ($self->{old_style_ssl}) {
+      $self->enable_ssl;
+   }
+
    $self->init;
    $self->event (connect => $self->{peer_host}, $self->{peer_port});
 }
@@ -350,6 +387,10 @@ sub write_data {
    $self->SUPER::write_data ($data);
 }
 
+sub default_namespace {
+   return 'client';
+}
+
 sub handle_stanza {
    my ($self, $p, $node) = @_;
 
@@ -361,6 +402,8 @@ sub handle_stanza {
    my (@res) = $self->event (recv_stanza_xml => $node);
    @res = grep $_, @res;
    return if @res;
+
+   my $def_ns = $self->default_namespace;
 
    if ($node->eq (stream => 'features')) {
       $self->event (stream_features => $node);
@@ -390,14 +433,13 @@ sub handle_stanza {
       $self->event (sasl_error => $error);
       $self->disconnect ('SASL authentication failure: ' . $error->string);
 
-   } elsif ($node->eq (client => 'iq')) {
+   } elsif ($node->eq ($def_ns => 'iq')) {
       $self->event (iq_xml => $node);
-      $self->handle_iq ($node);
 
-   } elsif ($node->eq (client => 'message')) {
+   } elsif ($node->eq ($def_ns => 'message')) {
       $self->event (message_xml => $node);
 
-   } elsif ($node->eq (client => 'presence')) {
+   } elsif ($node->eq ($def_ns => 'presence')) {
       $self->event (presence_xml => $node);
 
    } elsif ($node->eq (stream => 'error')) {
@@ -409,7 +451,7 @@ sub handle_stanza {
 
 sub init {
    my ($self) = @_;
-   $self->{writer}->send_init_stream ($self->{language}, $self->{domain}, $self->{stream_namespace});
+   $self->{writer}->send_init_stream ($self->{language}, $self->{domain}, $self->{stream_namespace}, $self->{stream_version_override});
 }
 
 =item B<is_connected ()>
@@ -612,7 +654,12 @@ sub send_sasl_auth {
    }
 
    $self->{writer}->send_sasl_auth (
-      [map { $_->text } @mechs], $self->{username}, $self->{host}, $self->{password}
+      [map { $_->text } @mechs],
+      $self->{username},
+      ($self->{use_host_as_sasl_hostname}
+         ? $self->{host}
+         : $self->{domain}),
+      $self->{password}
    );
 }
 
@@ -1033,7 +1080,7 @@ to test this.
 
 =item connect => $host, $port
 
-This event is generated when a successful connect was performed to
+This event is generated when a successful TCP connect was performed to
 the domain passed to C<new>.
 
 Note: C<$host> and C<$port> might be different from the domain you passed to
@@ -1044,7 +1091,7 @@ C<$host> and C<$port>.
 
 =item disconnect => $host, $port, $message
 
-This event is generated when the connection was lost or another error
+This event is generated when the TCP connection was lost or another error
 occurred while writing or reading from it.
 
 C<$message> is a human readable error message for the failure.
@@ -1113,15 +1160,38 @@ Here is an example:
 This event is sent when a presence stanza is received. C<$node> is the
 L<AnyEvent::XMPP::Node> object that represents the <presence> tag.
 
+If you want to overtake the handling of the stanza, see C<iq_xml>
+below.
+
 =item message_xml => $node
 
 This event is sent when a message stanza is received. C<$node> is the
 L<AnyEvent::XMPP::Node> object that represents the <message> tag.
 
+If you want to overtake the handling of the stanza, see C<iq_xml>
+below.
+
 =item iq_xml => $node
 
 This event is emitted when a iq stanza arrives. C<$node> is the
 L<AnyEvent::XMPP::Node> object that represents the <iq> tag.
+
+If you want to overtake the handling of a stanza, you should
+register a callback for the C<before_iq_xml> event and call the
+C<stop_event> method. See also L<Object::Event>. This is an example:
+
+   $con->reg_cb (before_iq_xml => sub {
+      my ($con, $node) = @_;
+
+      if (...) {
+         # and stop_event will stop internal handling of the stanza:
+         $con->stop_event;
+      }
+   });
+
+Please note that if you overtake handling of a stanza none of the internal
+handling of that stanza will be done. That means you won't get events
+like C<iq_set_request_xml> anymore.
 
 =item iq_set_request_xml => $node
 

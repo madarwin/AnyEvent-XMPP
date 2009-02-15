@@ -1,6 +1,35 @@
 Revision history for Net-XMPP2
 
-0.3
+0.4 Sun Feb 15 22:59:38 CET 2009
+         - added a $dont_retrieve_vcard to ::Ext::VCard, to
+           prevent retrieval when session_ready event comes.
+         - implemented support for old-style (tcp port 5223) SSL connections,
+           use the old_style_ssl option for ::Connection to enable TLS handshaking
+           upon TCP connect.
+         - added $message argument to subscription related events. the contents
+           comes from the <status> elements in the presence stanza.
+         - made special contact for keeping track of the presences of our own
+           resources. See ::IM::Roster::get_own_contact() and ::IM::Contact::is_me().
+         - minor fixes in ::Ext::MUC.
+         - added 'stream_version_override' parameter to ::Connection, mostly
+           for testing purposes with ejabberd (to enforce old-jabber-style
+           authentication).
+         - partially reversed a patch w.r.t. hostname usage for SASL mechanism.
+           A flag 'use_host_as_sasl_hostname' is provided for giving the hostname
+           to SASL.
+         - rewrote AnyEvent::XMPP::Ext::MUC a bit and made the API more sane.
+           for example: join_room doesn't take a callback anymore.
+         - added more C<disco_feature> methods to the extensions, so that
+           they can be registered to an ::Ext::Disco extension to display
+           support for certain features.
+         - xmpp_datetime_as_timestamp fixed w.r.t. UTC based timestamps.
+         - added possibility to override iq_xml events, and documented
+           how to overtake handling of message, presence and iq stanzas.
+         - added patch from Pedro Melo to give stanzas sent by a ::Component
+           the right namespace.
+         - added patch from Pedro Melo to fix passing of the host in ::Component.
+
+0.3 Mon Jan 28 23:00:58 CET 2009
          - fixed a bug in disconnect error reporting.
          - fixed bad parameter passing of AnyEvent::XMPP::Client to
            AnyEvent::XMPP::IM::Account, also 'host' is used for overriding

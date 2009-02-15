@@ -432,8 +432,8 @@ This function transforms a time to the XMPP date time format.
 The meanings of C<$sec>, ..., C<$year> are explained in the perldoc
 of Perl's C<localtime> builtin and have the same value ranges.
 
-C<$tz> has to be either C<"UTC"> or of the form C<[+-]hh:mm>, if it is
-undefined "UTC" will be used.
+C<$tz> has to be either C<"Z"> (for UTC) or of the form C<[+-]hh:mm> (offset
+from UTC), if it is undefined "Z" will be used.
 
 C<$secfrac> are optional and can be the fractions of the second.
 
@@ -443,7 +443,7 @@ See also XEP-0082.
 
 sub to_xmpp_datetime {
    my ($sec, $min, $hour, $mday, $mon, $year, $tz, $secfrac) = @_;
-   my $time = to_xmpp_time ($sec, $min, $hour, (defined $tz ? $tz : 'UTC'), $secfrac);
+   my $time = to_xmpp_time ($sec, $min, $hour, (defined $tz ? $tz : 'Z'), $secfrac);
    sprintf "%04d-%02d-%02dT%s", $year + 1900, $mon + 1, $mday, $time;
 }
 
@@ -461,6 +461,8 @@ documentation for C<to_xmpp_datetime>.
 
 C<$tz> and C<$secfrac> might be undefined.
 
+If C<$tz> is undefined the timezone is to be assumed to be UTC.
+
 If C<$string> contained just a time C<$mday>, C<$mon> and C<$year> will be undefined.
 
 See also XEP-0082.
@@ -469,11 +471,13 @@ See also XEP-0082.
 
 sub from_xmpp_datetime {
    my ($string) = @_;
+
    if ($string !~
-      /^(?:(\d{4})-?(\d{2})-?(\d{2})T)?(\d{2}):(\d{2}):(\d{2})(\.\d{3})?(UTC|[+-]\d{2}:\d{2})?/)
+      /^(?:(\d{4})-?(\d{2})-?(\d{2})T)?(\d{2}):(\d{2}):(\d{2})(\.\d{3})?(Z|[+-]\d{2}:\d{2})?/)
    {
       return ()
    }
+
    ($6, $5, $4,
       ($3 ne '' ? $3        : undef),
       ($2 ne '' ? $2 - 1    : undef),
@@ -494,8 +498,23 @@ This function requires the L<POSIX> module.
 sub xmpp_datetime_as_timestamp {
    my ($string) = @_;
    require POSIX;
-   my ($s, $m, $h, $md, $mon, $year) = from_xmpp_datetime ($string);
-   POSIX::mktime ($s, $m, $h, $md, $mon, $year)
+   my ($s, $m, $h, $md, $mon, $year, $tz) = from_xmpp_datetime ($string);
+
+   my $otz = $ENV{TZ};
+   $ENV{TZ} = ($tz =~ /^([+-])(\d{2}):(\d{2})$/ ? "UTC $tz" : "");
+   POSIX::tzset ();
+
+   my $ts = POSIX::mktime ($s, $m, $h, $md, $mon, $year);
+
+   if (defined $otz) {
+      $ENV{TZ} = $otz;
+   } else {
+      delete $ENV{TZ};
+   }
+
+   POSIX::tzset ();
+
+   $ts
 }
 
 sub dump_twig_xml {
