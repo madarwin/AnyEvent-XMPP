@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               AnyEvent-XMPP
-version:            0.51
+version:            0.52
 abstract:           An implementation of the XMPP Protocol
 author:
     - Robin Redeker <elmex@ta-sa.org>
@@ -20,13 +20,14 @@ requires:
     Net::LibIDN:         0
     Object::Event:       0.7
     Scalar::Util:        0
+    Time::Local:         0
     XML::Parser::Expat:  0
     XML::Writer:         0
 no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.54
+generated_by:       ExtUtils::MakeMaker version 6.57_05
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4
