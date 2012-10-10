@@ -8,11 +8,11 @@ AnyEvent::XMPP - An implementation of the XMPP Protocol
 
 =head1 VERSION
 
-Version 0.52
+Version 0.53
 
 =cut
 
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 =head1 SYNOPSIS
 
@@ -93,7 +93,7 @@ For SASL authentication
 
 For stringprep profiles to handle JIDs.
 
-=item L<Digest::SHA1>
+=item L<Digest::SHA>
 
 For component authentication and old-style authentication.
 
@@ -113,6 +113,14 @@ Here are some notes to the last releases (release of this version is at top):
 =head2 Version
 
 =over 4
+
+=item * 0.53
+
+Maintenance release. Patches for various small issues, see Changes file.
+
+=item * 0.52
+
+Maintenance release.
 
 =item * 0.51
 

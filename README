@@ -2,7 +2,7 @@ NAME
     AnyEvent::XMPP - An implementation of the XMPP Protocol
 
 VERSION
-    Version 0.52
+    Version 0.53
 
 SYNOPSIS
        use AnyEvent::XMPP::Connection;
@@ -72,7 +72,7 @@ REQUIREMENTS
     Net::LibIDN
         For stringprep profiles to handle JIDs.
 
-    Digest::SHA1
+    Digest::SHA
         For component authentication and old-style authentication.
 
     And yes, all these are essential for XMPP communication. Even though
@@ -88,6 +88,15 @@ RELEASE NOTES
     top):
 
   Version
+    *   0.53
+
+        Maintenance release. Patches for various small issues, see Changes
+        file.
+
+    *   0.52
+
+        Maintenance release.
+
     *   0.51
 
         Maintenance release. Added a patch which fixes Object::Event
