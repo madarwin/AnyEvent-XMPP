@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               AnyEvent-XMPP
-version:            0.53
+version:            0.54
 abstract:           An implementation of the XMPP Protocol
 author:
     - Robin Redeker <elmex@ta-sa.org>
@@ -17,6 +17,7 @@ requires:
     Authen::SASL:        0
     MIME::Base64:        0
     Net::LibIDN:         0
+    Net::SSLeay:         1.33
     Object::Event:       0.7
     Scalar::Util:        0
     Time::Local:         0
