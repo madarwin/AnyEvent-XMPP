@@ -98,4 +98,5 @@ lib/AnyEvent/XMPP/Error.pm
 lib/AnyEvent/XMPP/Node.pm
 lib/AnyEvent/XMPP/TestClient.pm
 lib/AnyEvent/XMPP.pm
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
