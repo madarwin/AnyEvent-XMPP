@@ -35,6 +35,16 @@ sub handle_incoming_pubsub_event {
     $self->event(pubsub_recv => @items);
 }
 
+sub handle_incoming_pubsub_item {
+  my ($self, $node) = @_;
+
+  if(my ($q) = $node->find_all ([qw/pubsub items/])) {
+    foreach($q->find_all ([qw/pubsub item/])) {
+      $self->event(pubsub_item_recv => ($q->attr("node"),$_));
+    }
+  }
+}
+
 =head1 METHODS
 
 =over 4
@@ -58,6 +68,18 @@ sub init {
     my ($self) = @_;
 
     $self->reg_cb (
+       	ext_before_iq_xml =>  sub {
+            my ($self, $con, $node) = @_;
+            my $handled = 0;
+
+	         for my $n ($node->nodes) {
+	            if (my ($q) = $n->find_all ([qw/pubsub items/])) {
+		            #$self->stop_event;  # can't stop the event... needs to go furither in the processing chain?
+		            $self->handle_incoming_pubsub_item($n);
+	            }
+	         }
+            $handled
+	     },
         ext_before_message_xml => sub {
             my ($self, $con, $node) = @_;
 
@@ -170,6 +192,103 @@ sub subscribe_node {
     );
 }
 
+sub subscribe_node_bare_jid {
+    my ($self, $con, $uri, $cb) = @_;
+    my $jid = bare_jid($con->jid);
+
+    my ($service, $node) = split_uri ($uri);
+
+    $con->send_iq (
+        set => sub {
+            my ($w) = @_;
+            simxml ($w, defns => 'pubsub', node => {
+                    name => 'pubsub', childs => [
+                    { name => 'subscribe', attrs => [ 
+                        node => $node,
+                        jid => $jid ]
+                    }
+                    ]
+                });
+        },
+        sub {
+            my ($node, $err) = @_;
+            $cb->(defined $err ? $err : ()) if $cb;
+        },
+        (defined $service ? (to => $service) : ())
+    );
+}
+
+sub get_subscribers {
+    my ($self, $con, $uri, $cb) = @_;
+    my $jid = $con->jid;
+
+    my ($service, $node) = split_uri ($uri);
+
+    $con->send_iq (
+        get => sub {
+            my ($w) = @_;
+            simxml ($w, defns => 'pubsub', node => {
+                    name => 'pubsub', childs => [
+                    { name => 'subscriptions', attrs => [
+			  node => $node]}
+                    ]
+                });
+        },
+        sub {
+            my ($node, $err) = @_;
+            $cb->(defined $err ? $err : ()) if $cb;
+        },
+        (defined $service ? (to => $service) : ())
+    );
+}
+
+sub set_node_config {
+    my ($self, $con, $uri, $create_cb, $cb) = @_;
+
+    my ($service, $node) = split_uri ($uri);
+
+    $con->send_iq (
+        set => sub {
+            my ($w) = @_;
+            simxml ($w, defns => 'pubsub_own', node => {
+                    name => 'pubsub', childs => [
+                    { name => 'configure', attrs => [
+			  node => $node], childs => [$create_cb]}
+                    ]
+                });
+        },
+        sub {
+            my ($node, $err) = @_;
+            $cb->(defined $err ? $err : ()) if $cb;
+        },
+        (defined $service ? (to => $service) : ())
+    );
+}
+
+sub get_node_config {
+    my ($self, $con, $uri, $cb) = @_;
+    my $jid = $con->jid;
+
+    my ($service, $node) = split_uri ($uri);
+
+    $con->send_iq (
+        get => sub {
+            my ($w) = @_;
+            simxml ($w, defns => 'pubsub_own', node => {
+                    name => 'pubsub', childs => [
+                    { name => 'configure', attrs => [
+			  node => $node]}
+                    ]
+                });
+        },
+        sub {
+            my ($node, $err) = @_;
+            $cb->(defined $err ? $err : ()) if $cb;
+        },
+        (defined $service ? (to => $service) : ())
+    );
+}
+
 =item B<unsubscribe_node>($con, $uri, $bc)>
 C<$con> is the connection already established,
 C<$uri> is the name of the node to be created
@@ -182,6 +301,32 @@ Try to unsubscribe from a node.
 sub unsubscribe_node {
     my ($self, $con, $uri, $cb) = @_;
     my $jid = $con->jid;
+
+    my ($service, $node) = split_uri ($uri);
+
+    $con->send_iq (
+        set => sub {
+            my ($w) = @_;
+            simxml ($w, defns => 'pubsub', node => {
+                    name => 'pubsub', childs => [
+                    { name => 'unsubscribe', attrs => [
+                        node => $node,
+                        jid => $jid ]
+                    }
+                    ]
+                });
+        },
+        sub {
+            my ($node, $err) = @_;
+            $cb->(defined $err ? $err : ()) if $cb;
+        },
+        (defined $service ? (to => $service) : ())
+    );
+}
+
+sub unsubscribe_node_bare_jid {
+    my ($self, $con, $uri, $cb) = @_;
+    my $jid = bare_jid($con->jid);
 
     my ($service, $node) = split_uri ($uri);
 
@@ -234,7 +379,32 @@ sub publish_item {
         },
         sub {
             my ($node, $err) = @_;
-            warn "OK $create_cb / $cb\n";
+            #warn "OK $create_cb / $cb\n";
+            $cb->(defined $err ? $err : ()) if $cb;
+        },
+        (defined $service ? (to => $service) : ())
+    );
+}
+
+sub publish_item_id {
+    my ($self,$con, $uri, $id, $create_cb, $cb) = @_;
+    my ($service, $node) = split_uri ($uri);
+
+    $con->send_iq (
+        set => sub {
+            my ($w) = @_;
+            simxml ($w, defns => 'pubsub', node => {
+                    name => 'pubsub', childs => [
+                    { name => 'publish', attrs => [ node => $node ], childs => [
+                        { name => 'item', attrs => [id => $id], childs => [ $create_cb ] }
+                        ]
+                    },
+                    ]
+                });
+        },
+        sub {
+            my ($node, $err) = @_;
+            #warn "OK $create_cb / $cb\n";
             $cb->(defined $err ? $err : ()) if $cb;
         },
         (defined $service ? (to => $service) : ())
