@@ -1,6 +1,6 @@
 package AnyEvent::XMPP::Ext::Pubsub;
 use strict;
-use AnyEvent::XMPP::Util qw/simxml split_uri/;
+use AnyEvent::XMPP::Util qw/bare_jid simxml split_uri/;
 use AnyEvent::XMPP::Namespaces qw/xmpp_ns/;
 use AnyEvent::XMPP::Ext;
 
@@ -24,15 +24,13 @@ mechanism. (partially implemented)
 =cut
 
 sub handle_incoming_pubsub_event {
-    my ($self, $node) = @_;
-    
-    my (@items);
-    if(my ($q) = $node->find_all ([qw/pubsub_ev items/])) {
-        foreach($q->find_all ([qw/pubsub_ev item/])) {
-            push @items, $_;
-        }
+  my ($self, $node) = @_;
+
+  if(my ($q) = $node->find_all ([qw/pubsub_ev items/])) {
+    foreach($q->find_all ([qw/pubsub_ev item/])) {
+      $self->event(pubsub_event_recv => ($q->attr("node"),$_));
     }
-    $self->event(pubsub_recv => @items);
+  }
 }
 
 sub handle_incoming_pubsub_item {
@@ -107,7 +105,7 @@ sub delete_node {
     my ($self, $con, $uri, $cb) = @_;
 
     my ($service, $node) = split_uri ($uri);
-    
+
     $con->send_iq (
         set => sub {
             my ($w) = @_;

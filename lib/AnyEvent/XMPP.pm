@@ -8,11 +8,11 @@ AnyEvent::XMPP - An implementation of the XMPP Protocol
 
 =head1 VERSION
 
-Version 0.55
+Version 0.56
 
 =cut
 
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 =head1 SYNOPSIS
 
