@@ -706,7 +706,15 @@ event below.
 sub authenticate {
    my ($self) = @_;
    my $node = $self->{features};
-   my @mechs = $node->find_all ([qw/sasl mechanisms/], [qw/sasl mechanism/]);
+   my @oldmechs = $node->find_all ([qw/sasl mechanisms/], [qw/sasl mechanism/]);
+   my @mechs;
+   foreach (@oldmechs) {
+     if ($_->text eq "SCRAM-SHA-1") {
+       # reject as it does not seem to work...
+     } else {
+       push @mechs, $_;
+     }
+   }
 
    # Yes, and also iq-auth isn't correctly advertised in the
    # stream features! We all love the depreacted XEP-0078, eh?
